@@ -1,0 +1,22 @@
+{
+  "name": "example",
+  "version": 1.0,
+  "features": {
+    "path": "///",
+    "array": [ 1, 2, 3, 4 ]
+  },
+  "modules": [
+    {
+      "name": "module1",
+      "enabled": true
+    },
+    {
+      "name": "module2",
+      "enabled": false
+    },
+    {
+      "name": "module3",
+      "enabled": true
+    }
+  ]
+}
