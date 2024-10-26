@@ -8,7 +8,7 @@
 
 namespace BaseTool::ThreadPool::Container
 {
-    template<typename T>
+    template<typename T,typename Container,typename Com>
         requires std::totally_ordered<T>
     class PriorityQueue
     {
@@ -25,13 +25,13 @@ namespace BaseTool::ThreadPool::Container
         template<typename ... Args>
         void Emplace(Args&& ... args)
         {
-            std::unique_lock<std::shared_mutex> lock(mtx_);
+            std::unique_lock lock(mtx_);
             queue_.emplace(std::forward<Args>(args)...);
         }
 
-        T Top() const
+        T Top()
         {
-            std::shared_lock lock(mtx_);
+            std::unique_lock lock(mtx_);
             return queue_.top();
         }
 
@@ -41,21 +41,21 @@ namespace BaseTool::ThreadPool::Container
             queue_.pop();
         }
 
-        bool Empty() const
+        bool Empty()
         {
             std::shared_lock lock(mtx_);
             return queue_.empty();
         }
 
-        size_t Size() const
+        size_t Size()
         {
             std::shared_lock lock(mtx_);
             return queue_.size();
         }
 
     private:
-        mutable std::shared_mutex mtx_;
-        std::priority_queue<T> queue_;
+        std::shared_mutex mtx_;
+        std::priority_queue<T,Container,Com> queue_;
     };
 
 }

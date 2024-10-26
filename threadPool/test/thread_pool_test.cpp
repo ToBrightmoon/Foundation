@@ -1,25 +1,33 @@
 #include <iostream>
 
-#include "priority_queue.hpp"
+#include "task_concept.hpp"
+#include "thread_pool.hpp"
+#include "task_handler_impl.h"
 
 int main()
 {
     using namespace BaseTool::ThreadPool;
 
-    Container::PriorityQueue<int> pq;
+    ThreadPool<Task::ThreadPoolTaskImpl> pool;
 
-    std::cout << pq.Empty() << "\n";
-
-    std::cout << pq.Size() << "\n";
-    pq.Push(10);
-    pq.Push(20);
-    pq.Push(1);
-
-    auto size = pq.Size();
-    for(int i = 0; i < size; i++)
+    auto func = []()
     {
-        std::cout << pq.Top() << " ";
-        pq.Pop();
-    }
+        std::cout << "The func Hello World!\n";
+        return 1;
+    };
+    auto ctr = pool.AddTask<Task::TaskControllerImpl<Task::ThreadPoolTaskImpl>>(1,func);
+    //
+    auto ctr2 = pool.AddTask<Task::TaskControllerImpl<Task::ThreadPoolTaskImpl>>(2,func);
+
+
+    // ctr->Start();
+
+    ctr2->Start();
+
+    pool.Start();
+
+
     std::cout << "Hello Thread Pool" << "\n";
+
+    // std::this_thread::sleep_for(std::chrono::seconds(10));
 }
