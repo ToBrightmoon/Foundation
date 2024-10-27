@@ -16,9 +16,7 @@ namespace BaseTool::ThreadPool
     class ThreadPool
     {
     public:
-        // explicit ThreadPool(uint numThreads = std::thread::hardware_concurrency());
-
-        explicit ThreadPool(uint numThreads = 1);
+        explicit ThreadPool(uint numThreads = std::thread::hardware_concurrency());
 
         ~ThreadPool();
 
