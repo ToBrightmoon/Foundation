@@ -35,6 +35,27 @@ namespace BaseTool::ThreadPool::Container
             return queue_.top();
         }
 
+        void Clear()
+        {
+            std::unique_lock lock(mtx_);
+            while (!queue_.empty())
+            {
+                queue_.pop();
+            }
+        }
+
+        void ReSort()
+        {
+            std::unique_lock lock(mtx_);
+            int size = queue_.size();
+            for(int i = 0 ; i < size ; i++)
+            {
+                T val = queue_.top();
+                queue_.pop();
+                queue_.push(val);
+            }
+        }
+
         void Pop()
         {
             std::unique_lock lock(mtx_);

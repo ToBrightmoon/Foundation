@@ -27,12 +27,6 @@ int main()
     std::future<int> res;
     auto ctr2 = pool.AddTask<Task::TaskControllerImpl<Task::ThreadPoolTaskImpl>>(1,res,func2,1);
 
-    // std::pair<std::shared_ptr<Task::TaskControllerImpl<Task::ThreadPoolTaskImpl>>,std::future<int>> ss= pool.AddTask<Task::ThreadPoolTaskImpl>(3,func);
-
-
-    // ctr->Start();
-
-    // ctr2->Start();
     ctr->Start();
 
     ctr2->Start();
@@ -42,6 +36,16 @@ int main()
 
     std::cout << "Hello Thread Pool" << "\n";
 
-    std::cout << "The result is: " << res.get() << std::endl;
+    try
+    {
+        std::cout << "The result is: " << res.get() << std::endl;
+    }
+    catch (const std::exception &e)
+    {
+        std::cout << e.what() << std::endl;
+    }
+
+
+    pool.Stop();
     // std::this_thread::sleep_for(std::chrono::seconds(10));
 }

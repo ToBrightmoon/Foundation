@@ -15,6 +15,12 @@ namespace BaseTool::ThreadPool
     template<Task::ThreadPoolTask TaskType>
     class ThreadPool
     {
+        enum class ThreadPoolStatus
+        {
+            Pause,
+            Running,
+            Stop
+        };
     public:
         explicit ThreadPool(uint numThreads = std::thread::hardware_concurrency());
 
@@ -27,6 +33,8 @@ namespace BaseTool::ThreadPool
         std::shared_ptr<ControllerType> AddTask(int, const std::function<void(void)> &);
 
         void Start();
+
+        void Stop();
 
     private:
         struct TaskTypePtrCom
@@ -46,6 +54,12 @@ namespace BaseTool::ThreadPool
         std::shared_ptr<std::condition_variable> cond_ = std::make_shared<std::condition_variable>();
 
         const uint numThreads_ = std::thread::hardware_concurrency();
+
+        ThreadPoolStatus status_ = ThreadPoolStatus::Pause;
+
+        std::atomic_int reSortTimes_ = 0;
+
+        const int maxTimes_ = 10000;
 
         Container::PriorityQueue<std::shared_ptr<TaskType>, std::vector<std::shared_ptr<TaskType> >, TaskTypePtrCom>
         taskQues_;
@@ -91,7 +105,6 @@ namespace BaseTool::ThreadPool
                                                                   Func &&f,
                                                                   Args &&... args)
     {
-
         auto task = std::make_shared<std::packaged_task<ReturnType(void)> >(
             std::bind(std::forward<Func>(f), std::forward<Args>(args)...));
 
@@ -110,31 +123,11 @@ namespace BaseTool::ThreadPool
         return taskController;
     }
 
-    // template<Task::ThreadPoolTask TaskType>
-    // template<Task::TaskController<TaskType> ControllerType, typename... Args>
-    // auto ThreadPool<TaskType>::AddTask(int priority, const std::function<void()> &f,
-    //                                                               Args &&... args) -> std::pair<std::shared_ptr<ControllerType>, std::future<decltype(f(args...))> >
-    // {
-    //     using ReturnType = decltype(f(args...));
-    //
-    //     auto task = std::make_shared<std::packaged_task<ReturnType(void)> >(std::bind(f, std::forward<Args>(args)...));
-    //
-    //     std::future<ReturnType> future = task->get_future();
-    //
-    //     auto taskRun = std::make_shared<TaskType>([task]() { (*task)(); }, priority);
-    //
-    //     auto taskController = std::make_shared<ControllerType>(*taskRun, cond_, future);
-    //
-    //     taskQues_.push(taskRun);
-    //
-    //     cond_->notify_all();
-    //
-    //     return std::make_pair(taskController, future);
-    // }
-
     template<Task::ThreadPoolTask TaskType>
     void ThreadPool<TaskType>::Start()
     {
+        std::unique_lock<std::mutex> lock(mtx_);
+        status_ = ThreadPoolStatus::Running;
         for (int i = 0; i < numThreads_; ++i)
         {
             workers_.emplace_back(std::jthread(std::bind(&ThreadPool<TaskType>::process, this)));
@@ -142,24 +135,53 @@ namespace BaseTool::ThreadPool
     }
 
     template<Task::ThreadPoolTask TaskType>
+    void ThreadPool<TaskType>::Stop()
+    {
+        std::unique_lock<std::mutex> lock(mtx_);
+        status_ = ThreadPoolStatus::Stop;
+        cond_->notify_all();
+    }
+
+    template<Task::ThreadPoolTask TaskType>
     void ThreadPool<TaskType>::process()
     {
         while (true)
         {
-            std::unique_lock<std::mutex> lock(mtx_);
-            cond_->wait(lock, [this]()
+            std::shared_ptr<TaskType> task = nullptr;
             {
-                return !taskQues_.Empty();
-            });
+                std::unique_lock<std::mutex> lock(mtx_);
+                cond_->wait(lock, [this]()
+                {
+                    return (!taskQues_.Empty() && status_ == ThreadPoolStatus::Running)|| ThreadPoolStatus::Stop == status_;
+                });
 
-            auto task = taskQues_.Top();
-            // std::cout << "查询"<< "\n";
+                if(ThreadPoolStatus::Stop == status_)
+                {
+                    taskQues_.Clear();
+                    cond_->notify_all();
+                    return;
+                }
+                task = taskQues_.Top();
+                taskQues_.Pop();
+            }
+
             if (task != nullptr)
             {
                 if (task->IsRunnable())
                 {
+                    reSortTimes_.store(0);
                     (*task)();
-                    taskQues_.Pop();
+                }
+                else
+                {
+                    reSortTimes_.store(reSortTimes_.load() + 1);
+                    taskQues_.Push(task);
+                    taskQues_.ReSort();
+                    if(reSortTimes_.load() >= maxTimes_)
+                    {
+                        std::unique_lock<std::mutex> lock(mtx_);
+                        status_ = ThreadPoolStatus::Pause;
+                    }
                 }
             }
         }
