@@ -24,7 +24,7 @@ namespace BaseTool::ThreadPool::Task
 
 
     template<typename T,typename Task>
-    concept TaskController = TaskHandler<T>;
+    concept TaskController = TaskHandler<T> && std::is_constructible_v<T, std::shared_ptr<Task>,std::shared_ptr<std::condition_variable>>;
 
 
 }

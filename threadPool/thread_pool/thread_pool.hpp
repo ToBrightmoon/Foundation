@@ -20,11 +20,11 @@ namespace BaseTool::ThreadPool
 
         ~ThreadPool();
 
-        template<Task::TaskController<TaskType> ControllerType, typename... Args>
-        std::shared_ptr<ControllerType> AddTask(int, const std::function<void(void)> &f, Args &&... args);
+        template<Task::TaskController<TaskType> ControllerType, typename ReturnType, typename Func, typename... Args>
+        std::shared_ptr<ControllerType> AddTask(int, std::future<ReturnType> &, Func &&, Args &&...);
 
         template<Task::TaskController<TaskType> ControllerType>
-        std::shared_ptr<ControllerType> AddTask(int, const std::function<void(void)> &f);
+        std::shared_ptr<ControllerType> AddTask(int, const std::function<void(void)> &);
 
         void Start();
 
@@ -59,7 +59,7 @@ namespace BaseTool::ThreadPool
     template<Task::ThreadPoolTask TaskType>
     ThreadPool<TaskType>::~ThreadPool()
     {
-        for(auto &worker : workers_)
+        for (auto &worker: workers_)
         {
             worker.join();
         }
@@ -86,26 +86,51 @@ namespace BaseTool::ThreadPool
     }
 
     template<Task::ThreadPoolTask TaskType>
-    template<Task::TaskController<TaskType> ControllerType, typename... Args>
-    std::shared_ptr<ControllerType> ThreadPool<TaskType>::AddTask(int priority, const std::function<void()> &f,
+    template<Task::TaskController<TaskType> ControllerType, typename ReturnType, typename Func, typename... Args>
+    std::shared_ptr<ControllerType> ThreadPool<TaskType>::AddTask(int priority, std::future<ReturnType> &reFeture,
+                                                                  Func &&f,
                                                                   Args &&... args)
     {
-        using ReturnType = decltype(f(args...));
 
-        auto task = std::make_shared<std::packaged_task<ReturnType(void)> >(std::bind(f, std::forward<Args>(args)...));
+        auto task = std::make_shared<std::packaged_task<ReturnType(void)> >(
+            std::bind(std::forward<Func>(f), std::forward<Args>(args)...));
 
         std::future<ReturnType> future = task->get_future();
 
+        reFeture = std::move(future);
+
         auto taskRun = std::make_shared<TaskType>([task]() { (*task)(); }, priority);
 
-        auto taskController = std::make_shared<ControllerType>(*taskRun, cond_, future);
+        auto taskController = std::make_shared<ControllerType>(taskRun, cond_);
 
-        taskQues_.push(taskRun);
+        taskQues_.Push(taskRun);
 
         cond_->notify_all();
 
         return taskController;
     }
+
+    // template<Task::ThreadPoolTask TaskType>
+    // template<Task::TaskController<TaskType> ControllerType, typename... Args>
+    // auto ThreadPool<TaskType>::AddTask(int priority, const std::function<void()> &f,
+    //                                                               Args &&... args) -> std::pair<std::shared_ptr<ControllerType>, std::future<decltype(f(args...))> >
+    // {
+    //     using ReturnType = decltype(f(args...));
+    //
+    //     auto task = std::make_shared<std::packaged_task<ReturnType(void)> >(std::bind(f, std::forward<Args>(args)...));
+    //
+    //     std::future<ReturnType> future = task->get_future();
+    //
+    //     auto taskRun = std::make_shared<TaskType>([task]() { (*task)(); }, priority);
+    //
+    //     auto taskController = std::make_shared<ControllerType>(*taskRun, cond_, future);
+    //
+    //     taskQues_.push(taskRun);
+    //
+    //     cond_->notify_all();
+    //
+    //     return std::make_pair(taskController, future);
+    // }
 
     template<Task::ThreadPoolTask TaskType>
     void ThreadPool<TaskType>::Start()
@@ -131,7 +156,7 @@ namespace BaseTool::ThreadPool
             // std::cout << "查询"<< "\n";
             if (task != nullptr)
             {
-                if(task->IsRunnable())
+                if (task->IsRunnable())
                 {
                     (*task)();
                     taskQues_.Pop();
